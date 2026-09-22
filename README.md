@@ -405,7 +405,7 @@ Durante o desenvolvimento deste projeto foram praticados conceitos relacionados 
 
 Graduado em Engenharia de Controle e Automação e em transição para a área de Dados, com foco em **Data Analytics, Data Engineering, Machine Learning e Inteligência Artificial**.
 
-🔗 LinkedIn: https://www.linkedin.com/in/pedro-prado-34369a1b5
+🔗 LinkedIn: www.linkedin.com/in/pedro-hsprado-dataengineer
 
 🔗 GitHub: https://github.com/Dev-PPrado
 
