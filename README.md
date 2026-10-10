@@ -2,13 +2,13 @@
 
 **Página no portfólio:** https://dev-pprado.github.io/projetos/northwind-sales-analytics/
 
-Relatórios em SQL sobre o banco Northwind (uma distribuidora fictícia de alimentos) para responder perguntas de negócio sobre receita, clientes e produtos. O banco roda em PostgreSQL com pgAdmin via Docker Compose e é carregado automaticamente na primeira subida.
+Relatórios em SQL sobre o banco Northwind (uma distribuidora fictícia de alimentos, com 830 pedidos de julho de 1996 a maio de 1998) para responder perguntas de negócio sobre receita, clientes e produtos. O banco roda em PostgreSQL com pgAdmin via Docker Compose e é carregado automaticamente na primeira subida.
 
 ## Como funciona
 
 ```mermaid
 flowchart LR
-  DUMP[northwind.sql] -->|carregado na 1ª subida| PG[(PostgreSQL em Docker<br/>porta 55432)]
+  DUMP[northwind.sql] -->|carregado na 1ª subida| PG[(PostgreSQL 16 em Docker<br/>porta 55432)]
   PG --> R[relatorios/*.sql]
   R --> A[receita, YTD, ranking e<br/>segmentação de clientes, produtos]
   PGA[pgAdmin<br/>porta 5050] -.consulta.-> PG
@@ -29,8 +29,21 @@ receita = unit_price × quantity × (1 - discount)
 | [`03_total_revenues_per_customer.sql`](relatorios/03_total_revenues_per_customer.sql) | Quanto cada cliente gerou de receita? | JOIN entre `customers`, `orders` e `order_details`, `GROUP BY` |
 | [`04_total_revenues_per_customer_group.sql`](relatorios/04_total_revenues_per_customer_group.sql) | Em que faixa de valor cada cliente está? | `NTILE(5)` sobre a receita, do grupo 1 (maior valor) ao 5 (menor) |
 | [`05_total_revenues_per_customer_group_low.sql`](relatorios/05_total_revenues_per_customer_group_low.sql) | Quais clientes podem ser alvo de uma campanha de marketing? | CTE com a segmentação do relatório 04, filtrando os grupos 3, 4 e 5 |
-| [`06_top_10_produtos.sql`](relatorios/06_top_10_produtos.sql) | Quais produtos geram mais receita? | JOIN entre `products` e `order_details`, ordenação por receita |
-| [`07_uk_clientes_pay_more_1000.sql`](relatorios/07_uk_clientes_pay_more_1000.sql) | Quais clientes do Reino Unido pagaram mais de 1.000? | `HAVING`, criação de uma `VIEW` reutilizável |
+| [`06_top_10_produtos.sql`](relatorios/06_top_10_produtos.sql) | Quais produtos geram mais receita? | JOIN entre `products` e `order_details`, ordenação por receita, `LIMIT 10` |
+| [`07_uk_clientes_pay_more_1000.sql`](relatorios/07_uk_clientes_pay_more_1000.sql) | Quais clientes do Reino Unido pagaram mais de 1.000? | `HAVING`, `CREATE OR REPLACE VIEW` reutilizável |
+
+### Alguns resultados
+
+Todos os relatórios foram executados no PostgreSQL 16 do `docker-compose.yml` (10/10/2026).
+
+| Pergunta | Resultado |
+|---|---|
+| Receita em 1997 | 617.085,20 |
+| Cliente com maior receita | QUICK-Stop (110.277,31), seguido de Ernst Handel (104.874,98) e Save-a-lot Markets (104.361,95) |
+| Produto com maior receita | Côte de Blaye (141.396,74), quase o dobro do segundo, Thüringer Rostbratwurst (80.368,67) |
+| Cliente do Reino Unido que mais pagou | Hari Kumar (16.215,33) |
+
+Os 89 clientes com pedidos são divididos em 5 grupos pelo `NTILE`. O relatório 05 devolve os grupos 3 a 5 como público para campanhas.
 
 ### Modelo de dados
 
@@ -92,13 +105,12 @@ docker exec -i db psql -U postgres -d northwind < relatorios/03_total_revenues_p
 
 ## Limitações conhecidas
 
-- **Relatório 06 incompleto:** o arquivo começa sem o `SELECT` e não tem o `LIMIT 10`, então não executa como está.
-- **Relatório 07 cria uma view:** rodar duas vezes dá erro porque a view já existe (`CREATE OR REPLACE VIEW` resolveria).
-- **Resultados não documentados:** os relatórios ainda não têm os resultados salvos junto com as consultas.
+- **Valores sem arredondamento:** as receitas saem com todas as casas decimais (ex.: `617085.2023927002`).
+- **Resultados não versionados:** os resultados completos não ficam salvos junto com as consultas, só os destaques acima.
 
 ## Próximos passos
 
-- [ ] Corrigir o relatório 06
+- [ ] Arredondar os valores com `ROUND(..., 2)`
 - [ ] Crescimento ano contra ano (YoY)
 - [ ] Ranking de clientes com `RANK()`
 - [ ] Análise RFM e de retenção de clientes
