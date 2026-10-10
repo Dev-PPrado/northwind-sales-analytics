@@ -1,412 +1,105 @@
-# 📊 Northwind Sales Analytics
+# Análise de vendas Northwind com SQL
 
-Projeto de análise de dados utilizando **SQL e PostgreSQL** a partir do banco de dados **Northwind**.
+**Página no portfólio:** https://dev-pprado.github.io/projetos/northwind-sales-analytics/
 
-O objetivo do projeto é responder perguntas de negócio relacionadas a **receita, vendas, clientes e produtos**, utilizando consultas SQL e técnicas de análise como **agregações, JOINs, CTEs e Window Functions**.
+Relatórios em SQL sobre o banco Northwind (uma distribuidora fictícia de alimentos) para responder perguntas de negócio sobre receita, clientes e produtos. O banco roda em PostgreSQL com pgAdmin via Docker Compose e é carregado automaticamente na primeira subida.
 
----
+## Como funciona
 
-## 🎯 Objetivo
+```mermaid
+flowchart LR
+  DUMP[northwind.sql] -->|carregado na 1ª subida| PG[(PostgreSQL em Docker<br/>porta 55432)]
+  PG --> R[relatorios/*.sql]
+  R --> A[receita, YTD, ranking e<br/>segmentação de clientes, produtos]
+  PGA[pgAdmin<br/>porta 5050] -.consulta.-> PG
+```
 
-Este projeto tem como objetivo transformar dados transacionais do banco Northwind em informações úteis para apoiar a tomada de decisões.
-
-As análises desenvolvidas buscam responder perguntas como:
-
-* 💰 Qual foi a receita total da empresa?
-* 📈 Como a receita evoluiu ao longo do tempo?
-* 📊 Qual foi o crescimento mensal das vendas?
-* 📅 Qual é a receita acumulada no ano (YTD)?
-* 👥 Quais clientes geram mais receita?
-* 🎯 Como os clientes podem ser segmentados de acordo com seu valor?
-* 🏆 Quais são os produtos que geram mais receita?
-* 📉 Quais clientes possuem menor volume de compras e podem ser analisados em campanhas de marketing?
-
----
-
-# 🗂️ Estrutura do Projeto
+Todas as consultas usam a mesma fórmula de receita, que aplica o desconto de cada item do pedido:
 
 ```text
-northwind-sales-analytics/
-│
-├── README.md
-│
-├── sql/
-│   ├── 01_revenue_analysis.sql
-│   ├── 02_customer_analysis.sql
-│   ├── 03_customer_segmentation.sql
-│   ├── 04_product_analysis.sql
-│   └── 05_sales_growth.sql
-│
-├── database/
-│   └── northwind.sql
-│
-├── docker/
-│   └── docker-compose.yml
-│
-└── images/
-    └── northwind-er-diagram.png
+receita = unit_price × quantity × (1 - discount)
 ```
 
----
+### Os relatórios
 
-# 🛠️ Tecnologias Utilizadas
+| Arquivo | Pergunta | Técnicas |
+|---|---|---|
+| [`01_total_revenues_1997.sql`](relatorios/01_total_revenues_1997.sql) | Qual foi a receita total em 1997? | `SUM`, subconsulta, `EXTRACT(YEAR)` |
+| [`02_receitas_acumuladas_YTD.sql`](relatorios/02_receitas_acumuladas_YTD.sql) | Como a receita evoluiu mês a mês e quanto acumulou no ano? | Duas CTEs, `SUM() OVER` para a receita acumulada (YTD), `LAG()` para a diferença e a variação % em relação ao mês anterior |
+| [`03_total_revenues_per_customer.sql`](relatorios/03_total_revenues_per_customer.sql) | Quanto cada cliente gerou de receita? | JOIN entre `customers`, `orders` e `order_details`, `GROUP BY` |
+| [`04_total_revenues_per_customer_group.sql`](relatorios/04_total_revenues_per_customer_group.sql) | Em que faixa de valor cada cliente está? | `NTILE(5)` sobre a receita, do grupo 1 (maior valor) ao 5 (menor) |
+| [`05_total_revenues_per_customer_group_low.sql`](relatorios/05_total_revenues_per_customer_group_low.sql) | Quais clientes podem ser alvo de uma campanha de marketing? | CTE com a segmentação do relatório 04, filtrando os grupos 3, 4 e 5 |
+| [`06_top_10_produtos.sql`](relatorios/06_top_10_produtos.sql) | Quais produtos geram mais receita? | JOIN entre `products` e `order_details`, ordenação por receita |
+| [`07_uk_clientes_pay_more_1000.sql`](relatorios/07_uk_clientes_pay_more_1000.sql) | Quais clientes do Reino Unido pagaram mais de 1.000? | `HAVING`, criação de uma `VIEW` reutilizável |
 
-* **SQL**
-* **PostgreSQL**
-* **Docker**
-* **Docker Compose**
-* **pgAdmin**
+### Modelo de dados
 
----
+As consultas usam principalmente quatro tabelas:
 
-# 🧠 Conceitos de SQL Aplicados
-
-Durante o desenvolvimento das análises são utilizados diversos conceitos importantes para análise e manipulação de dados.
-
-### Consultas e Agregações
-
-```sql
-SELECT
-FROM
-WHERE
-GROUP BY
-HAVING
-ORDER BY
-LIMIT
+```mermaid
+erDiagram
+  customers ||--o{ orders : customer_id
+  orders ||--|{ order_details : order_id
+  products ||--o{ order_details : product_id
 ```
 
-### JOINs
+O diagrama completo do banco está em [`pics/northwind-er-diagram.png`](pics/northwind-er-diagram.png).
 
-```sql
-INNER JOIN
-LEFT JOIN
+### Decisões
+
+- **Uma pergunta por arquivo:** cada relatório é independente e pode ser executado sozinho no pgAdmin ou no `psql`.
+- **CTEs em vez de subconsultas aninhadas:** no relatório 02, uma CTE calcula a receita mensal e outra acumula o ano, então cada passo pode ser lido e testado separadamente.
+- **Window functions para comparar períodos:** `LAG` e `SUM() OVER (PARTITION BY ano ORDER BY mês)` fazem a comparação com o mês anterior e o acumulado sem precisar de auto-JOIN.
+- **Ambiente reproduzível:** o dump é montado em `docker-entrypoint-initdb.d`, então o banco sobe já populado em qualquer máquina.
+
+## Stack
+
+| Parte | Tecnologias |
+|---|---|
+| Análise | SQL (PostgreSQL) |
+| Ambiente | Docker Compose, PostgreSQL, pgAdmin |
+
+## Como rodar localmente
+
+Pré-requisito: Docker com Docker Compose.
+
+```sh
+docker compose up -d        # sobe o PostgreSQL (já com o Northwind) e o pgAdmin
+docker compose down         # para os containers
+docker compose down -v      # para e apaga os volumes (o banco é recriado na próxima subida)
 ```
 
-### Funções de Agregação
+| Serviço | Endereço | Acesso |
+|---|---|---|
+| PostgreSQL | `localhost:55432`, banco `northwind` | usuário `postgres`, senha `postgres` |
+| pgAdmin | http://localhost:5050 | sem login. Cadastre o servidor com host `db`, porta `5432` |
 
-```sql
-SUM()
-COUNT()
-AVG()
-MIN()
-MAX()
+Para rodar um relatório pelo terminal:
+
+```sh
+docker exec -i db psql -U postgres -d northwind < relatorios/03_total_revenues_per_customer.sql
 ```
 
-### CTEs
-
-```sql
-WITH nome_cte AS (
-    SELECT ...
-)
-SELECT ...
-FROM nome_cte;
-```
-
-### Window Functions
-
-```sql
-SUM() OVER()
-LAG()
-LEAD()
-ROW_NUMBER()
-RANK()
-DENSE_RANK()
-NTILE()
-```
-
-### Análise Temporal
-
-```sql
-EXTRACT(YEAR FROM data)
-EXTRACT(MONTH FROM data)
-```
-
----
-
-# 📊 Análises Desenvolvidas
-
-## 1️⃣ Análise de Receita
-
-A primeira análise tem como objetivo calcular a receita total da empresa.
-
-A fórmula utilizada considera:
+## Estrutura
 
 ```text
-Receita = Preço Unitário × Quantidade × (1 - Desconto)
+.
+├── relatorios/           # consultas SQL, uma por pergunta de negócio
+├── pics/                 # northwind-er-diagram.png
+├── northwind.sql         # dump do banco (tabelas e dados)
+└── docker-compose.yml    # PostgreSQL e pgAdmin
 ```
 
-Exemplo:
-
-```sql
-SELECT
-    SUM(
-        order_details.unit_price *
-        order_details.quantity *
-        (1.0 - order_details.discount)
-    ) AS total_revenue
-FROM order_details;
-```
-
----
-
-## 2️⃣ Análise de Receita Mensal
-
-Nesta análise, as vendas são agrupadas por ano e mês.
-
-```sql
-SELECT
-    EXTRACT(YEAR FROM orders.order_date) AS year,
-    EXTRACT(MONTH FROM orders.order_date) AS month,
-    SUM(
-        order_details.unit_price *
-        order_details.quantity *
-        (1.0 - order_details.discount)
-    ) AS monthly_revenue
-FROM orders
-INNER JOIN order_details
-    ON orders.order_id = order_details.order_id
-GROUP BY
-    EXTRACT(YEAR FROM orders.order_date),
-    EXTRACT(MONTH FROM orders.order_date)
-ORDER BY
-    year,
-    month;
-```
-
-Essa análise permite acompanhar a evolução da receita ao longo do tempo.
-
----
-
-## 3️⃣ Crescimento Mensal e Receita Acumulada (YTD)
-
-Para analisar a evolução das vendas, são utilizadas **Window Functions**.
-
-A função `LAG()` permite comparar a receita atual com a receita do período anterior.
-
-```sql
-LAG(monthly_revenue) OVER (
-    PARTITION BY year
-    ORDER BY month
-)
-```
-
-A receita acumulada no ano é calculada utilizando:
-
-```sql
-SUM(monthly_revenue) OVER (
-    PARTITION BY year
-    ORDER BY month
-)
-```
-
-Essa métrica é conhecida como:
-
-> **YTD — Year To Date**
-
-Ela representa o valor acumulado desde o início do ano até determinado período.
-
----
-
-## 4️⃣ Análise de Clientes
-
-Nesta etapa é calculado o valor total gasto por cada cliente.
-
-```sql
-SELECT
-    customers.company_name,
-    SUM(
-        order_details.unit_price *
-        order_details.quantity *
-        (1.0 - order_details.discount)
-    ) AS total_revenue
-FROM customers
-INNER JOIN orders
-    ON customers.customer_id = orders.customer_id
-INNER JOIN order_details
-    ON orders.order_id = order_details.order_id
-GROUP BY
-    customers.company_name
-ORDER BY
-    total_revenue DESC;
-```
-
-Essa análise permite identificar os clientes que geram maior receita para a empresa.
-
----
-
-## 5️⃣ Segmentação de Clientes
-
-Os clientes são divididos em grupos de acordo com o valor total gasto.
-
-Para isso, é utilizada a Window Function:
-
-```sql
-NTILE(5)
-```
-
-Exemplo:
-
-```sql
-NTILE(5) OVER (
-    ORDER BY total_revenue DESC
-)
-```
-
-Os clientes são divididos em **5 grupos**.
-
-| Grupo | Característica                  |
-| ----- | ------------------------------- |
-| 1     | Clientes com maior valor        |
-| 2     | Clientes de alto valor          |
-| 3     | Clientes de valor intermediário |
-| 4     | Clientes de menor valor         |
-| 5     | Clientes com menor valor        |
-
-Essa segmentação pode ser utilizada para análises de:
-
-* Marketing;
-* Retenção de clientes;
-* Fidelização;
-* Estratégias comerciais.
-
----
-
-## 6️⃣ Ranking dos Produtos
-
-Nesta análise são identificados os produtos que geram maior receita.
-
-```sql
-SELECT
-    products.product_name,
-    SUM(
-        order_details.unit_price *
-        order_details.quantity *
-        (1.0 - order_details.discount)
-    ) AS sales
-FROM products
-INNER JOIN order_details
-    ON products.product_id = order_details.product_id
-GROUP BY
-    products.product_name
-ORDER BY
-    sales DESC
-LIMIT 10;
-```
-
-O resultado apresenta os **10 produtos com maior receita**.
-
----
-
-# 🗃️ Modelo de Dados
-
-O banco de dados Northwind representa uma empresa fictícia chamada **Northwind Traders**.
-
-O banco possui informações relacionadas a:
-
-* 👥 Clientes
-* 📦 Produtos
-* 🛒 Pedidos
-* 📋 Detalhes dos pedidos
-* 🏢 Fornecedores
-* 👨‍💼 Funcionários
-* 🚚 Transportadoras
-
-As principais tabelas utilizadas neste projeto são:
-
-```text
-customers
-    │
-    │ customer_id
-    ▼
-orders
-    │
-    │ order_id
-    ▼
-order_details
-    │
-    │ product_id
-    ▼
-products
-```
-
----
-
-# 🐳 Executando o Projeto com Docker
-
-## Pré-requisitos
-
-Antes de iniciar, é necessário possuir instalado:
-
-* Docker
-* Docker Compose
-
-Após clonar o repositório, execute:
-
-```bash
-docker compose up -d
-```
-
-Isso iniciará os serviços necessários para executar o banco PostgreSQL e o pgAdmin.
-
-Para parar os containers:
-
-```bash
-docker compose down
-```
-
-Caso seja necessário remover também os volumes e os dados:
-
-```bash
-docker compose down -v
-```
-
----
-
-# 🚀 Próximos Passos
-
-Este projeto será evoluído com novas análises e tecnologias.
-
-Algumas melhorias planejadas incluem:
-
-* [ ] Adicionar análise de crescimento **MoM**
-* [ ] Adicionar análise de crescimento **YoY**
-* [ ] Criar ranking de clientes utilizando `RANK()`
-* [ ] Implementar análise RFM
-* [ ] Adicionar análise de retenção de clientes
-* [ ] Criar novas análises utilizando CTEs
-* [ ] Utilizar Python para conexão e análise dos dados
-* [ ] Criar visualizações utilizando Pandas e Matplotlib
-* [ ] Criar pipeline ETL para processamento dos dados
-* [ ] Evoluir o projeto para uma arquitetura de Data Engineering
-
----
-
-# 📚 Principais Aprendizados
-
-Durante o desenvolvimento deste projeto foram praticados conceitos relacionados a:
-
-* Manipulação e consulta de dados utilizando SQL;
-* Relacionamento entre tabelas utilizando JOINs;
-* Agregação de dados;
-* Filtros utilizando `WHERE` e `HAVING`;
-* Criação de CTEs;
-* Utilização de Window Functions;
-* Análise temporal;
-* Cálculo de métricas de negócio;
-* Segmentação e ranking de clientes;
-* Análise de receita e vendas;
-* Utilização de PostgreSQL em ambiente Docker.
-
----
-
-# 👨‍💻 Autor
-
-**Pedro Henrique Prado**
-
-Graduado em Engenharia de Controle e Automação e em transição para a área de Dados, com foco em **Data Analytics, Data Engineering, Machine Learning e Inteligência Artificial**.
-
-🔗 LinkedIn: www.linkedin.com/in/pedro-hsprado-dataengineer
-
-🔗 GitHub: https://github.com/Dev-PPrado
-
----
+## Limitações conhecidas
+
+- **Relatório 06 incompleto:** o arquivo começa sem o `SELECT` e não tem o `LIMIT 10`, então não executa como está.
+- **Relatório 07 cria uma view:** rodar duas vezes dá erro porque a view já existe (`CREATE OR REPLACE VIEW` resolveria).
+- **Resultados não documentados:** os relatórios ainda não têm os resultados salvos junto com as consultas.
+
+## Próximos passos
+
+- [ ] Corrigir o relatório 06
+- [ ] Crescimento ano contra ano (YoY)
+- [ ] Ranking de clientes com `RANK()`
+- [ ] Análise RFM e de retenção de clientes
+- [ ] Conectar ao banco com Python e gerar gráficos dos resultados
